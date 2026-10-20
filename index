@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Representación interactiva de la escala de pH</title>
+<style>
+  :root {
+    --ink: #1f2937;
+    --muted: #5b6472;
+    --paper: #ffffff;
+    --panel: #f5f7fa;
+    --line: #d7dde5;
+    --accent: #2457a7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink); background: #edf1f5;
+    line-height: 1.45;
+  }
+  main {
+    max-width: 980px; margin: 0 auto; background: var(--paper);
+    border: 1px solid var(--line); border-radius: 18px;
+    padding: clamp(18px, 4vw, 34px); box-shadow: 0 8px 28px #1f293710;
+  }
+  h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.15; }
+  .intro { margin: 0 0 24px; color: var(--muted); max-width: 70ch; }
+  .control-panel {
+    display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(220px, .7fr);
+    gap: 22px; align-items: center; padding: 20px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .label-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  label { font-weight: 700; }
+  output { font-weight: 800; font-size: 1.2rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; margin: 20px 0 8px; accent-color: var(--accent); cursor: pointer; }
+  .range-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; }
+  .readout {
+    border-left: 4px solid var(--accent); padding: 12px 16px;
+    background: #fff; border-radius: 8px; min-height: 104px;
+  }
+  .readout strong { display: block; font-size: 1.15rem; margin-bottom: 4px; }
+  .readout p { margin: 0; color: var(--muted); }
+  .scale-wrap { margin: 28px 0 12px; }
+  .scale-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .scale-title h2 { font-size: 1.1rem; margin: 0; }
+  .scale-title span { color: var(--muted); font-size: .9rem; }
+  .scale {
+    position: relative; height: 28px; border-radius: 8px;
+    background: linear-gradient(90deg,
+      #e53935 0%, #ef6c35 12%, #f6a63a 24%, #e8d84a 36%,
+      #a8cf59 46%, #4bbf75 50%, #48b9a7 58%, #409fce 68%,
+      #4778d0 78%, #6555bc 89%, #8245a5 100%);
+    border: 1px solid #ffffff; box-shadow: inset 0 0 0 1px #00000012;
+  }
+  .marker {
+    position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+    width: 4px; height: 42px; background: #111827; border-radius: 3px;
+    transition: left .12s ease;
+  }
+  .marker::before {
+    content: ""; position: absolute; top: -3px; left: 50%; transform: translateX(-50%);
+    width: 12px; height: 12px; border-radius: 50%; background: #fff;
+    border: 3px solid #111827;
+  }
+  .ticks { display: grid; grid-template-columns: repeat(15, 1fr); margin-top: 10px; }
+  .tick { text-align: center; font-size: .8rem; color: var(--muted); }
+  .tick:first-child { text-align: left; }
+  .tick:last-child { text-align: right; }
+  .zones { display: grid; grid-template-columns: 6fr 3fr 6fr; gap: 8px; margin-top: 8px; font-size: .85rem; font-weight: 700; }
+  .zones div { padding: 8px 10px; border-radius: 7px; text-align: center; }
+  .acid { background: #fff0e9; color: #9a3412; }
+  .neutral { background: #e8f7eb; color: #166534; }
+  .base { background: #eeedff; color: #5b21b6; }
+  .math-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+  .math-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .math-card h3 { font-size: .9rem; color: var(--muted); margin: 0 0 8px; }
+  .math-card p { margin: 0; font-size: clamp(1rem, 2.3vw, 1.35rem); font-weight: 750; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .explain { margin-top: 22px; padding: 16px 18px; border-radius: 12px; background: #f8fafc; border: 1px solid var(--line); }
+  .explain h2 { margin: 0 0 8px; font-size: 1.05rem; }
+  .explain p { margin: 6px 0; }
+  .note { color: var(--muted); font-size: .88rem; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  button {
+    border: 1px solid #bdc7d4; background: #fff; color: var(--ink);
+    border-radius: 999px; padding: 8px 13px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #eaf0f8; border-color: #8ba5c8; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #80b5ff; outline-offset: 3px; }
+  @media (max-width: 700px) {
+    body { padding: 10px; }
+    .control-panel { grid-template-columns: 1fr; }
+    .math-grid { grid-template-columns: 1fr; }
+    .zones { grid-template-columns: 6fr 1fr 6fr; font-size: .75rem; }
+    .tick { font-size: .7rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Explora la escala de pH</h1>
+  <p class="intro">Mueve el control para observar cómo se relacionan el pH y la concentración de iones hidronio (H₃O⁺). La escala de pH es logarítmica: cambiar una unidad de pH equivale a un factor de diez en la concentración, bajo la aproximación escolar para soluciones acuosas diluidas.</p>
+
+  <section class="control-panel" aria-label="Control interactivo">
+    <div>
+      <div class="label-row">
+        <label for="phSlider">Selecciona un valor de pH</label>
+        <output id="phOutput" for="phSlider">pH 7</output>
+      </div>
+      <input id="phSlider" type="range" min="0" max="14" step="1" value="7" aria-describedby="sliderHelp">
+      <div class="range-ends"><span>0 · Más ácido</span><span>14 · Más básico</span></div>
+      <p id="sliderHelp" class="note">También puedes elegir un valor de ejemplo:</p>
+      <div class="presets">
+        <button type="button" data-ph="2">pH 2</button>
+        <button type="button" data-ph="4">pH 4</button>
+        <button type="button" data-ph="7">pH 7</button>
+        <button type="button" data-ph="10">pH 10</button>
+        <button type="button" data-ph="12">pH 12</button>
+      </div>
+    </div>
+    <div class="readout" aria-live="polite">
+      <strong id="classification">Neutra</strong>
+      <p id="description">A pH 7, la solución es neutra en la referencia de 25 °C.</p>
+    </div>
+  </section>
+
+  <section class="scale-wrap" aria-label="Escala de pH">
+    <div class="scale-title">
+      <h2>Escala de pH (0–14)</h2>
+      <span id="markerLabel">Valor seleccionado: 7</span>
+    </div>
+    <div class="scale">
+      <div class="marker" id="marker" style="left:50%" aria-hidden="true"></div>
+    </div>
+    <div class="ticks" aria-hidden="true">
+      <span class="tick">0</span><span class="tick">1</span><span class="tick">2</span><span class="tick">3</span><span class="tick">4</span>
+      <span class="tick">5</span><span class="tick">6</span><span class="tick">7</span><span class="tick">8</span><span class="tick">9</span>
+      <span class="tick">10</span><span class="tick">11</span><span class="tick">12</span><span class="tick">13</span><span class="tick">14</span>
+    </div>
+    <div class="zones">
+      <div class="acid">Ácida · pH &lt; 7</div>
+      <div class="neutral">Neutra</div>
+      <div class="base">Básica · pH &gt; 7</div>
+    </div>
+  </section>
+
+  <section class="math-grid" aria-label="Valores calculados">
+    <div class="math-card">
+      <h3>Concentración aproximada de H₃O⁺</h3>
+      <p id="concentration">1 × 10⁻⁷ mol/L</p>
+    </div>
+    <div class="math-card">
+      <h3>Relación matemática</h3>
+      <p>pH = −log₁₀[H₃O⁺]</p>
+    </div>
+    <div class="math-card">
+      <h3>Respecto a pH 7</h3>
+      <p id="factor">Igual concentración</p>
+    </div>
+  </section>
+
+  <section class="explain">
+    <h2>¿Qué significa este resultado?</h2>
+    <p id="interpretation">A pH 7, la concentración aproximada de H₃O⁺ es 10⁻⁷ mol/L.</p>
+    <p class="note"><strong>Importante:</strong> este modelo es una representación introductoria. Usa la aproximación [H₃O⁺] ≈ 10⁻ᵖᴴ para soluciones acuosas diluidas y la referencia de 25 °C. En química más avanzada, el pH se define mediante la actividad de los iones, y la escala no está limitada universalmente entre 0 y 14.</p>
+  </section>
+</main>
+
+<script>
+  const slider = document.getElementById('phSlider');
+  const phOutput = document.getElementById('phOutput');
+  const marker = document.getElementById('marker');
+  const markerLabel = document.getElementById('markerLabel');
+  const classification = document.getElementById('classification');
+  const description = document.getElementById('description');
+  const concentration = document.getElementById('concentration');
+  const factor = document.getElementById('factor');
+  const interpretation = document.getElementById('interpretation');
+
+  function superscript(value) {
+    const map = {'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+    return String(value).split('').map(ch => map[ch] || ch).join('');
+  }
+
+  function update(ph) {
+    ph = Number(ph);
+    const exponent = -ph;
+    const molarity = Math.pow(10, exponent);
+    const concentrationText = '1 × 10' + superscript(exponent) + ' mol/L';
+
+    slider.value = ph;
+    phOutput.textContent = 'pH ' + ph;
+    marker.style.left = (ph / 14 * 100) + '%';
+    markerLabel.textContent = 'Valor seleccionado: ' + ph;
+    concentration.textContent = concentrationText;
+
+    if (ph < 7) {
+      classification.textContent = 'Ácida';
+      description.textContent = 'Un pH menor que 7 indica una solución ácida en la referencia escolar habitual.';
+    } else if (ph > 7) {
+      classification.textContent = 'Básica o alcalina';
+      description.textContent = 'Un pH mayor que 7 indica una solución básica o alcalina en la referencia escolar habitual.';
+    } else {
+      classification.textContent = 'Neutra';
+      description.textContent = 'A 25 °C, pH 7 corresponde a la neutralidad en la referencia escolar habitual.';
+    }
+
+    if (ph === 7) {
+      factor.textContent = 'Igual concentración';
+      interpretation.textContent = 'A pH 7, la concentración aproximada de H₃O⁺ es 10⁻⁷ mol/L. Es el valor de referencia para comparar los demás valores.';
+    } else if (ph < 7) {
+      const ratio = Math.pow(10, 7 - ph);
+      factor.textContent = ratio.toLocaleString('es-CO') + '× mayor';
+      interpretation.textContent = 'Respecto a pH 7, esta solución tiene aproximadamente ' + ratio.toLocaleString('es-CO') + ' veces más concentración de H₃O⁺. Cuanto menor es el pH, mayor es esta concentración.';
+    } else {
+      const ratio = Math.pow(10, ph - 7);
+      factor.textContent = ratio.toLocaleString('es-CO') + '× menor';
+      interpretation.textContent = 'Respecto a pH 7, esta solución tiene aproximadamente ' + ratio.toLocaleString('es-CO') + ' veces menos concentración de H₃O⁺. Cuanto mayor es el pH, menor es esta concentración.';
+    }
+  }
+
+  slider.addEventListener('input', event => update(event.target.value));
+  document.querySelectorAll('button[data-ph]').forEach(button => {
+    button.addEventListener('click', () => update(button.dataset.ph));
+  });
+  update(slider.value);
+</script>
+</body>
+</html>
